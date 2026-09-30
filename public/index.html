@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>artists-os</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { height: 100vh; overflow: hidden; background: #efe9e2; position: relative; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .window { position: absolute; width: 340px; border-radius: 12px; box-shadow: 8px 8px 0 rgba(20,18,15,.18); border: 2px solid #14120f; background: #fdfbf7; overflow: hidden; }
+    .titlebar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #14120f; color: #fdfbf7; font-size: 13px; cursor: grab; user-select: none; }
+    .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; background: #f9c74f; }
+    .window-body { padding: 14px; font-size: 13px; line-height: 1.5; }
+    .counter { font-size: 15px; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .pill { font-size: 12px; background: #efe9e2; border: 1px solid #14120f; border-radius: 999px; padding: 2px 10px; }
+    h1 { font-size: 15px; letter-spacing: .02em; }
+    .muted { color: #6d675e; font-size: 12px; }
+    #events { max-height: 120px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 11px; }
+    #events div { border-bottom: 1px dotted #c9c2b6; padding: 3px 0; }
+  </style>
+</head>
+<body>
+  <div class="window" id="win" style="left:8vw;top:12vh">
+    <div class="titlebar"><span class="dot"></span><h1>artists-os · backend check</h1></div>
+    <div class="window-body">
+      <div class="counter">
+        <strong id="visitors">…</strong> visitors in the last 5 min
+        <span class="pill" id="name">connecting…</span>
+      </div>
+      <p class="muted">A tiny placeholder to prove the backend boots. The real draggable-window OS UI lives here next.</p>
+      <h1 style="margin:10px 0 4px">activity</h1>
+      <div id="events"></div>
+    </div>
+  </div>
+  <script type="module">
+    // Dragging (the core "OS" gesture).
+    const win = document.getElementById('win');
+    const bar = win.querySelector('.titlebar');
+    let drag = null;
+    bar.addEventListener('pointerdown', (e) => {
+      drag = { dx: e.clientX - win.offsetLeft, dy: e.clientY - win.offsetTop };
+      bar.setPointerCapture(e.pointerId);
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      win.style.left = Math.max(0, e.clientX - drag.dx) + 'px';
+      win.style.top = Math.max(0, e.clientY - drag.dy) + 'px';
+    });
+    bar.addEventListener('pointerup', () => (drag = null));
+
+    // Anonymous session bootstrap.
+    const sessionId = localStorage.getItem('aoss') || null;
+    const res = await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId }),
+    });
+    const me = await res.json();
+    localStorage.setItem('aoss', me.sessionId);
+    document.getElementById('name').textContent = me.displayName + ' · ' + me.color;
+    document.getElementById('visitors').textContent = '1'; // overwritten by stream
+
+    // Save window position as the visitor's workspace state.
+    addEventListener('pointerup', () => {
+      fetch(`/api/session/${me.sessionId}/state`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Session-Id': me.sessionId },
+        body: JSON.stringify({ x: win.offsetLeft, y: win.offsetTop }),
+      }).catch(() => {});
+    });
+
+    // Realtime presence + activity.
+    const evBox = document.getElementById('events');
+    const es = new EventSource('/api/realtime');
+    es.addEventListener('hello', (e) => {
+      const d = JSON.parse(e.data);
+      document.getElementById('visitors').textContent = d.visitors;
+    });
+    es.addEventListener('artifact', (e) => {
+      const d = JSON.parse(e.data);
+      const div = document.createElement('div');
+      div.textContent = `${new Date().toLocaleTimeString()} ‹${d.by}› saved artwork "${d.title}"`;
+      evBox.prepend(div);
+    });
+    es.addEventListener('presence', (e) => {
+      const d = JSON.parse(e.data);
+      document.getElementById('visitors').textContent = d.visitors;
+    });
+  </script>
+  <script>
+    // Reload the last saved window position.
+    (async () => {
+      const stored = localStorage.getItem('aoss');
+      if (!stored) return;
+      const r = await fetch(`/api/session/${stored}/state`);
+      const s = await r.json();
+      if (s.state && typeof s.state.x === 'number') {
+        win.style.left = s.state.x + 'px';
+        win.style.top = s.state.y + 'px';
+      }
+    })();
+  </script>
+</body>
+</html>

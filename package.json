@@ -1,0 +1,16 @@
+{
+  "name": "artists-os-backend",
+  "version": "0.1.0",
+  "description": "Zero-dependency Node.js backend for artists-os: anonymous sessions, persisted window/workspace state, artwork gallery, SSE realtime presence.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "smoke": "node scripts/smoke.js"
+  },
+  "license": "MIT",
+  "private": true
+}
